@@ -1,0 +1,4 @@
+aiohttp
+opengsq
+pydantic-settings
+asyncpg
