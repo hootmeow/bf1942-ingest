@@ -56,7 +56,6 @@ async def process_server_success(pool: asyncpg.Pool, ip: str, port: int, raw_dat
         player_name = p.get('player', 'N/A')
         if player_name in excluded_player_names:
             continue
-
         normalized_players.append({
             "name": player_name,
             "keyhash": p.get('keyhash', None),
@@ -134,6 +133,7 @@ async def process_server_failure(pool: asyncpg.Pool, ip: str, port: int):
 async def _update_player_sessions(pool: asyncpg.Pool, server_id: int, prev_players: List[Dict], current_players: List[Dict], timestamp: datetime):
     prev_player_names = {p.get("name") for p in prev_players}
     current_player_names = {p.get("name") for p in current_players}
+
     joined_players = current_player_names - prev_player_names
     left_players = prev_player_names - current_player_names
 

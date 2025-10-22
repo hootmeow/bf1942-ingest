@@ -30,6 +30,11 @@ class Scheduler:
         server_identifier = f"{ip}:{port}"
         return server_identifier in excluded_servers or (ip, port) in excluded_servers
 
+    def _is_server_excluded(self, ip: str, port: int) -> bool:
+        excluded_servers = self._exclusions.get('server_id', set())
+        server_identifier = f"{ip}:{port}"
+        return server_identifier in excluded_servers or (ip, port) in excluded_servers
+
     async def _update_exclusions_cache(self):
         while True:
             logger.info("Updating exclusions cache...")
