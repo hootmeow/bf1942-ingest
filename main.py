@@ -1,6 +1,15 @@
 import asyncio
+import logging
 from engine.scheduler import Scheduler
 from engine.database import Database
+
+
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s %(levelname)s [%(name)s] %(message)s",
+)
+
+logger = logging.getLogger(__name__)
 
 async def main():
     db_manager = Database()
@@ -11,13 +20,13 @@ async def main():
     try:
         await scheduler.run()
     except asyncio.CancelledError:
-        print("Scheduler run cancelled.")
+        logger.info("Scheduler run cancelled.")
     finally:
         await db_manager.disconnect()
-        print("Application shutdown complete.")
+        logger.info("Application shutdown complete.")
 
 if __name__ == "__main__":
     try:
         asyncio.run(main())
     except KeyboardInterrupt:
-        print("\nShutdown requested by user.")
+        logger.info("Shutdown requested by user.")

@@ -1,24 +1,29 @@
 import asyncpg
+import logging
 from .config import settings
+
+
+logger = logging.getLogger(__name__)
+
 
 class Database:
     _pool: asyncpg.Pool = None
 
     async def connect(self):
         if not self._pool:
-            print("Creating PostgreSQL connection pool...")
+            logger.info("Creating PostgreSQL connection pool...")
             try:
                 self._pool = await asyncpg.create_pool(dsn=settings.POSTGRES_DSN)
                 await self._setup_schema()
-                print("PostgreSQL connection pool established.")
-            except Exception as e:
-                print(f"FATAL: Could not connect to PostgreSQL. {e}")
-                exit(1)
+                logger.info("PostgreSQL connection pool established.")
+            except Exception:
+                logger.exception("FATAL: Could not connect to PostgreSQL.")
+                raise
 
     async def disconnect(self):
         if self._pool:
             await self._pool.close()
-            print("PostgreSQL connection pool closed.")
+            logger.info("PostgreSQL connection pool closed.")
 
     async def get_pool(self) -> asyncpg.Pool:
         if not self._pool:
@@ -27,7 +32,7 @@ class Database:
 
     async def _setup_schema(self):
         """Runs all necessary DDL commands to create tables, triggers, and views."""
-        print("Ensuring database schema exists...")
+        logger.info("Ensuring database schema exists...")
         async with self._pool.acquire() as conn:
             await conn.execute("""
                 DO $$ BEGIN
@@ -72,7 +77,19 @@ class Database:
                     notes TEXT, created_at TIMESTAMPTZ DEFAULT NOW(), UNIQUE(type, value)
                 );
             """)
-            
+            await conn.execute("""
+                ALTER TABLE exclusions
+                ADD COLUMN IF NOT EXISTS server_ip VARCHAR(45) GENERATED ALWAYS AS (
+                    CASE WHEN type = 'server_id' THEN split_part(value, ':', 1) ELSE NULL END
+                ) STORED,
+                ADD COLUMN IF NOT EXISTS server_port INTEGER GENERATED ALWAYS AS (
+                    CASE
+                        WHEN type = 'server_id' AND split_part(value, ':', 2) ~ '^[0-9]+$' THEN split_part(value, ':', 2)::INTEGER
+                        ELSE NULL
+                    END
+                ) STORED;
+            """)
+
             # This is the fully corrected trigger function
             await conn.execute("""
                 CREATE OR REPLACE FUNCTION identify_round_change()
@@ -184,4 +201,9 @@ class Database:
             await conn.execute("CREATE INDEX IF NOT EXISTS idx_servers_active_mod ON servers(active_mod);")
             await conn.execute("CREATE INDEX IF NOT EXISTS idx_snapshots_server_id_ts ON server_snapshots(server_id, timestamp DESC);")
             await conn.execute("CREATE INDEX IF NOT EXISTS idx_sessions_server_player_join ON player_sessions(server_id, player_name_norm, join_ts DESC);")
-        print("Schema is set up.")
+            await conn.execute("""
+                CREATE INDEX IF NOT EXISTS idx_exclusions_server_ip_port
+                ON exclusions(server_ip, server_port)
+                WHERE type = 'server_id';
+            """)
+        logger.info("Schema is set up.")
