@@ -23,6 +23,12 @@ class Scheduler:
         self._db_manager = db_manager
         self._pool = None
         self._exclusions = {'gametype': set(), 'player_name': set(), 'server_id': set()}
+        self._parked_servers = set()
+
+    def _is_server_excluded(self, ip: str, port: int) -> bool:
+        excluded_servers = self._exclusions.get('server_id', set())
+        server_identifier = f"{ip}:{port}"
+        return server_identifier in excluded_servers or (ip, port) in excluded_servers
 
     def _is_server_excluded(self, ip: str, port: int) -> bool:
         excluded_servers = self._exclusions.get('server_id', set())
@@ -59,6 +65,16 @@ class Scheduler:
                     len(self._exclusions['player_name']),
                     len(self._exclusions['server_id']),
                 )
+                # Resume any servers that were previously parked because they were excluded.
+                for ip, port in list(self._parked_servers):
+                    if not self._is_server_excluded(ip, port):
+                        logger.info(
+                            "Releasing previously excluded server %s:%s back into the polling queue.",
+                            ip,
+                            port,
+                        )
+                        self._parked_servers.discard((ip, port))
+                        await self._queue.put((time.time(), ip, port))
             except Exception:
                 logger.exception("Error updating exclusions cache.")
             await asyncio.sleep(300)
@@ -70,7 +86,6 @@ class Scheduler:
             try:
                 async with self._pool.acquire() as conn:
                     await conn.execute("REFRESH MATERIALIZED VIEW mv_player_advanced_stats;")
-                    await conn.execute("REFRESH MATERIALIZED VIEW mv_server_advanced_stats;")
                 logger.info("Materialized views refreshed.")
             except Exception:
                 logger.exception("Error refreshing materialized views.")
@@ -90,6 +105,8 @@ class Scheduler:
                     self._known_servers.add(server_id)
                     if self._is_server_excluded(ip, port):
                         logger.info("Discovered server %s:%s but it is currently excluded.", ip, port)
+                        self._parked_servers.add((ip, port))
+                        continue
                     else:
                         logger.info("Discovered new server: %s:%s", ip, port)
                     await self._queue.put((time.time(), ip, port))
@@ -103,7 +120,7 @@ class Scheduler:
             if self._is_server_excluded(ip, port):
                 logger.debug("Skipping excluded server %s:%s before polling.", ip, port)
                 self._queue.task_done()
-                await self._queue.put((time.time() + settings.POLL_INTERVAL_OFFLINE_S, ip, port))
+                self._parked_servers.add((ip, port))
                 continue
 
             sleep_duration = next_poll_time - time.time()
