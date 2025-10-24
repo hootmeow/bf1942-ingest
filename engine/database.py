@@ -154,7 +154,6 @@ class Database:
                 END;
                 $$;
             """)
-            await conn.execute("DROP MATERIALIZED VIEW IF EXISTS mv_player_advanced_stats;");
             await conn.execute("""
                 CREATE MATERIALIZED VIEW IF NOT EXISTS mv_player_advanced_stats AS
                 WITH session_stats AS (
