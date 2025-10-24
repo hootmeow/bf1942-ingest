@@ -32,6 +32,31 @@ async def process_server_success(pool: asyncpg.Pool, ip: str, port: int, raw_dat
         logger.info("Skipping server %s:%s due to excluded gametype '%s'.", ip, port, gametype)
         return
 
+    # --- Normalize Player Data ---
+    normalized_players = []
+    excluded_player_names = exclusions.get('player_name', set())
+    for p in players_raw:
+        player_name = p.get('player', 'N/A')
+        if player_name in excluded_player_names:
+            continue
+        normalized_players.append({
+            "name": player_name,
+            "keyhash": p.get('keyhash', None),
+            "score": _coerce_int(p.get('score')),
+            "ping": _coerce_int(p.get('ping')),
+            "team": _coerce_int(p.get('team')),
+            "kills": _coerce_int(p.get('kills')),
+            "deaths": _coerce_int(p.get('deaths')),
+        })
+
+    # --- THIS IS THE FIX ---
+    # Create the final info object that will be saved to the 'servers' table.
+    # It starts with the raw server info and adds the processed player list.
+    info_to_save = info.copy()
+    info_to_save['players'] = normalized_players
+    info_jsonb = json.dumps(info_to_save)
+    # --- END OF FIX ---
+
     hostname = info.get('hostname', 'N/A')
     mapname = info.get('mapname', 'N/A').lower()
     active_mod = info.get('active_mods', 'N/A')
@@ -57,6 +82,7 @@ async def process_server_success(pool: asyncpg.Pool, ip: str, port: int, raw_dat
     info_to_save['players'] = normalized_players
     info_jsonb = json.dumps(info_to_save)
 
+    # This INSERT/UPDATE now uses the correct 'info_jsonb' which contains the player list.
     server_id = await pool.fetchval("""
         INSERT INTO servers (ip, port, hostname, status, last_seen, first_seen, consecutive_failures, active_mod, gametype, info)
         VALUES ($1, $2, $3, 'online', $4, $4, 0, $5, $6, $7)
