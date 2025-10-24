@@ -1,0 +1,8 @@
+# Recommended Follow-up Improvements
+
+1. **Persist never-successful servers.** When a host fails every query, `process_server_failure` only updates existing rows and never inserts a placeholder, so totally offline servers vanish from reporting and their failure counters never rise. Upsert a `servers` row before incrementing `consecutive_failures` to keep long-term visibility into problem hosts.
+2. **Normalize player names before diffing sessions.** `_update_player_sessions` compares raw `name` strings but closes/open sessions using `player_name_norm`. A capitalization flip therefore leaves the old session open and creates a duplicate. Compare on the normalized key to avoid phantom churn.
+3. **Stop rebuilding heavy views at every boot.** `_setup_schema` drops `mv_player_advanced_stats` before recreating it, forcing a full refresh during every start-up. That blocks readers and slows restarts; manage the view via migrations or `REFRESH` instead.
+4. **Seed polling from the database.** `Scheduler.run` only receives work from the master-list poller. If the master list is down during a restart, the queue stays empty and ingestion halts. Preload known servers from `servers` (and/or pending snapshots) so workers keep polling through upstream outages.
+5. **Make worker parallelism configurable.** The scheduler spawns 200 workers unconditionally; on smaller hosts this overwhelms CPU and database connections. Drive the worker count from configuration to match deployment capacity.
+6. **Differentiate master-list failures from empty results.** `_master_list_poller` treats `None` (fetch error) the same as an empty list, so outages pass silently. Log and retry failures with backoff so operators know the pipeline is waiting on the master server.
