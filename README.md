@@ -92,7 +92,7 @@ Create the database and a dedicated user for the application.
 1.  **Clone the Repository**: Navigate to your home directory and clone the code.
     ```bash
     cd ~
-    git clone [https://github.com/your-username/bf1942-ingest.git](https://github.com/your-username/bf1942-ingest.git) # Replace with your repo URL
+    git clone (https://github.com/hootmeow/bf1942-ingest.git
     cd bf1942-ingest
     ```
 2.  **Set Up Python Environment**: Create a virtual environment and install dependencies.
